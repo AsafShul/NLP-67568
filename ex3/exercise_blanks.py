@@ -9,6 +9,7 @@ import operator
 import data_loader
 import pickle
 import tqdm
+import platform
 
 # ------------------------------------------- Constants ----------------------------------------
 
@@ -23,8 +24,19 @@ TRAIN = "train"
 VAL = "val"
 TEST = "test"
 
+NO_ACCELERATION = 'cpu'
+MACOS_GPU_ACCELERATION = 'mps'
+NVIDIA_GPU_ACCELERATION = 'cuda'
+
 
 # ------------------------------------------ Helper methods and classes --------------------------
+
+def _running_on_mac():
+    """
+    :return: true if running on macOs False otherwise.
+    """
+    return platform.system() == 'Darwin'
+
 
 def get_available_device():
     """
@@ -33,7 +45,12 @@ def get_available_device():
     Given a device, one can use module.to(device)
     and criterion.to(device) so that all the computations will be done on the GPU.
     """
-    return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    available_device = NO_ACCELERATION
+    if _running_on_mac() and torch.backends.mps.is_available():
+        available_device = MACOS_GPU_ACCELERATION
+    elif torch.cuda.is_available():
+        available_device = NVIDIA_GPU_ACCELERATION
+    return torch.device(available_device)
 
 
 def save_pickle(obj, path):
@@ -193,7 +210,8 @@ class DataManager():
     evaluation.
     """
 
-    def __init__(self, data_type=ONEHOT_AVERAGE, use_sub_phrases=True, dataset_path="stanfordSentimentTreebank", batch_size=50,
+    def __init__(self, data_type=ONEHOT_AVERAGE, use_sub_phrases=True, dataset_path="stanfordSentimentTreebank",
+                 batch_size=50,
                  embedding_dim=None):
         """
         builds the data manager used for training and evaluation.
@@ -264,14 +282,13 @@ class DataManager():
         return self.torch_datasets[TRAIN][0][0].shape
 
 
-
-
 # ------------------------------------ Models ----------------------------------------------------
 
 class LSTM(nn.Module):
     """
     An LSTM for sentiment analysis with architecture as described in the exercise description.
     """
+
     def __init__(self, embedding_dim, hidden_dim, n_layers, dropout):
         return
 
@@ -286,6 +303,7 @@ class LogLinear(nn.Module):
     """
     general class for the log-linear models for sentiment analysis.
     """
+
     def __init__(self, embedding_dim):
         return
 
@@ -384,6 +402,7 @@ def train_lstm_with_w2v():
 
 
 if __name__ == '__main__':
+    print(get_available_device())
     train_log_linear_with_one_hot()
     # train_log_linear_with_w2v()
     # train_lstm_with_w2v()
