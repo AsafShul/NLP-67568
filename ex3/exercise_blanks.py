@@ -144,7 +144,7 @@ def get_w2v_average(sent, word_to_vec, embedding_dim):
     :param embedding_dim: the dimension of the word embedding vectors
     :return The average embedding vector as numpy ndarray.
     """
-    return
+    return np.mean([word_to_vec[w] if w in word_to_vec else np.zeros(embedding_dim) for w in sent.text], axis=0)
 
 
 def get_one_hot(size, ind):
@@ -420,7 +420,27 @@ def evaluate(model, data_iterator, criterion, n, seq='Val'):
     :param criterion: the loss criterion used for evaluation
     :return: tuple of (average loss over all examples, average accuracy over all examples)
     """
-    return
+    loss, acc = [], []
+    batch_num = len(data_iterator)
+    with torch.no_grad():
+        with tqdm.tqdm(data_iterator, unit="batch") as tepoch:
+            for i, (data, target) in enumerate(tepoch):
+                tepoch.set_description(f"{seq}-eval-Epoch [{n}] ")
+                data, target = data.to(torch.float32).to(model.device), target.to(torch.float32).to(model.device)
+
+                # forward:
+                output = model(data).reshape((-1,))
+                iter_loss = criterion(output, target)
+                accuracy = binary_accuracy(get_predictions_for_data(model, output), target)  # todo api
+                loss.append(iter_loss.item())
+                acc.append(accuracy.item())
+
+                if i < batch_num - 1:
+                    tepoch.set_postfix(loss=iter_loss.item(), accuracy=100. * accuracy.item())
+                else:
+                    tepoch.set_postfix(loss=np.mean(loss), accuracy=100. * np.mean(acc))
+
+        return np.mean(loss), np.mean(acc)
 
 
 def get_predictions_for_data(model, output):
@@ -467,7 +487,9 @@ def train_log_linear_with_one_hot(lr, n_epochs, batch_size, weight_decay):
     """
     Here comes your code for training and evaluation of the log linear model with one hot representation.
     """
-    return
+    data_manager = DataManager(batch_size=batch_size)
+    model = LogLinear(data_manager.get_input_shape()[0])
+    train_model(model, data_manager, n_epochs, lr, weight_decay=weight_decay)
 
 
 def train_log_linear_with_w2v(lr, n_epochs, embedding_dim, batch_size, weight_decay):
