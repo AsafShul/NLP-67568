@@ -23,6 +23,10 @@ ONEHOT_AVERAGE = "onehot_average"
 W2V_AVERAGE = "w2v_average"
 W2V_SEQUENCE = "w2v_sequence"
 
+BASE       = 'base'
+NEG_POLAR  = 'negated_polarity'
+RARE_WORDS = 'rare_words'
+
 W2V_PATH = "w2v_dict.pkl"
 W2V_SEQ_PATH = "w2v_dict_seq.pkl"
 
@@ -35,7 +39,7 @@ MACOS_GPU_ACCELERATION = 'mps'
 NVIDIA_GPU_ACCELERATION = 'cuda'
 
 RES_DF_COLS = ['Train_loss', 'Train_acc', 'Val_loss', 'Val_acc']
-
+PLOT_TITLE = '{}: {} plot for {} epochs'
 
 # ------------------------------------------ Helper methods and classes --------------------------
 
@@ -324,6 +328,7 @@ class LSTM(nn.Module):
 
     def __init__(self, embedding_dim, hidden_dim, n_layers, dropout):
         super().__init__()
+        self.name = "LSTM"
         self.device = get_available_device(True)
         self.sigmoid = nn.Sigmoid()
         self.alpha = 0.5
@@ -347,6 +352,7 @@ class LogLinear(nn.Module):
 
     def __init__(self, embedding_dim):
         super().__init__()
+        self.name = f"Log-Linear ({'one-hot' if embedding_dim > 300 else 'W2V'})"
         self.device = get_available_device(True)
         self.sigmoid = nn.Sigmoid()
         self.linear = nn.Linear(embedding_dim, 1, device=self.device)
@@ -431,7 +437,7 @@ def evaluate(model, data_iterator, criterion, n, seq='Val'):
                 # forward:
                 output = model(data).reshape((-1,))
                 iter_loss = criterion(output, target)
-                accuracy = binary_accuracy(get_predictions_for_data(model, output), target)  # todo api
+                accuracy = binary_accuracy(get_predictions_for_data(model, output), target)
                 loss.append(iter_loss.item())
                 acc.append(accuracy.item())
 
@@ -455,7 +461,7 @@ def get_predictions_for_data(model, output):
     return (model.sigmoid(output) > model.alpha).to(torch.float32).reshape((-1,))
 
 
-def train_model(model, data_manager, n_epochs, lr, weight_decay=0.):
+def train_model(model, data_manager, n_epochs, lr, weight_decay=0.): # todo api
     """
     Runs the full training procedure for the given model. The optimization should be done using the Adam
     optimizer with all parameters but learning rate and weight decay set to default.
@@ -472,27 +478,36 @@ def train_model(model, data_manager, n_epochs, lr, weight_decay=0.):
     val_data_iterator = data_manager.get_torch_iterator(VAL)
     df = pd.DataFrame(np.nan, index=range(n_epochs), columns=RES_DF_COLS)
 
-    for epoch in range(n_epochs):
+    for epoch in range(1, n_epochs + 1):
         print('\n', '=' * 40, f'epoch [{epoch}]', '=' * 40)
         sleep(0.1)
         epoch_train_loss, epoch_train_acc = train_epoch(model, train_data_iterator, optimizer, criterion, epoch)
         epoch_val_loss, epoch_val_acc = evaluate(model, val_data_iterator, criterion, epoch)
         df.loc[epoch] = [epoch_train_loss, epoch_train_acc, epoch_val_loss, epoch_val_acc]
 
-    df.plot()
+    plot_res(df, model, 'acc', n_epochs)
+    plot_res(df, model, 'loss', n_epochs)
+
+
+def plot_res(df, model,  metric, n_epochs, save=True):
+    ax = df[[c for c in RES_DF_COLS if metric in c]].plot(title=PLOT_TITLE.format(model.name, metric, n_epochs))
+    ax.set_xlabel("epoch num")
+    ax.set_ylabel(metric)
+    if save: ax.get_figure().savefig(f'{model.name.replace(" ", "")}_{metric}.jpg')
     plt.show()
 
 
-def train_log_linear_with_one_hot(lr, n_epochs, batch_size, weight_decay):
+def train_log_linear_with_one_hot(lr=0.01, n_epochs=20, batch_size=64, weight_decay=0.001, mode=BASE): # todo api
     """
     Here comes your code for training and evaluation of the log linear model with one hot representation.
     """
     data_manager = DataManager(batch_size=batch_size)
     model = LogLinear(data_manager.get_input_shape()[0])
+    # train_model(model, data_manager, n_epochs, lr, weight_decay=weight_decay, mode=mode) # todo api
     train_model(model, data_manager, n_epochs, lr, weight_decay=weight_decay)
 
 
-def train_log_linear_with_w2v(lr, n_epochs, embedding_dim, batch_size, weight_decay):
+def train_log_linear_with_w2v(lr=0.01, n_epochs=20, batch_size=64, weight_decay=0.001, embedding_dim=300):
     """
     Here comes your code for training and evaluation of the log linear model with word embeddings
     representation.
@@ -502,14 +517,15 @@ def train_log_linear_with_w2v(lr, n_epochs, embedding_dim, batch_size, weight_de
     train_model(model, data_manager, n_epochs, lr, weight_decay=weight_decay)
 
 
-def train_lstm_with_w2v(lr, n_epochs, embedding_dim, batch_size, weight_decay, n_layers, dropout):
+def train_lstm_with_w2v(lr=0.001, n_epochs=4, batch_size=64,
+                        weight_decay=0.0001, embedding_dim=300, n_layers=1, dropout=0.5):
     """
     Here comes your code for training and evaluation of the LSTM model.
     """
     data_manager = DataManager(data_type=W2V_SEQUENCE, embedding_dim=embedding_dim,
                                batch_size=batch_size)
 
-    model = LSTM(embedding_dim=embedding_dim, hidden_dim=embedding_dim,
+    model = LSTM(embedding_dim=embedding_dim, hidden_dim=100,
                  n_layers=n_layers, dropout=dropout)
 
     train_model(model, data_manager, n_epochs, lr, weight_decay=weight_decay)
@@ -517,42 +533,24 @@ def train_lstm_with_w2v(lr, n_epochs, embedding_dim, batch_size, weight_decay, n
 
 if __name__ == '__main__':
     USE_ACCELERATION = False
+    # todo : all runs on the spacial cases as well...
+    # todo : what to do with the test set??
 
-    # params:
-    _lr = 0.0005
-    _n_epochs = 8
-    _embedding_dim = 300
-    _batch_size = 64
-    _weight_decay = 0.0001
-    _n_layers = 1
-    _dropout = 1
+    # base dataset runs:
+    train_log_linear_with_one_hot()
+    train_log_linear_with_w2v()
+    train_lstm_with_w2v()
 
-    # run_log_linear = True
-    run_log_linear = False
+    # # negated polarity dataset runs:
+    # train_log_linear_with_one_hot(mode=NEG_POLAR)
+    # train_log_linear_with_w2v(mode=NEG_POLAR)
+    # train_lstm_with_w2v(mode=NEG_POLAR)
+    #
+    # # rare words dataset runs:
+    # train_log_linear_with_one_hot(mode=RARE_WORDS)
+    # train_log_linear_with_w2v(mode=RARE_WORDS)
+    # train_lstm_with_w2v(mode=RARE_WORDS)
 
-    # run_log_linear_w2v = True
-    run_log_linear_w2v = False
 
-    run_lstm = True
-    # run_lstm = False
-
-    # run Log Linear:
-    if run_log_linear:
-        train_log_linear_with_one_hot(lr=_lr, n_epochs=_n_epochs,
-                                      batch_size=_batch_size,
-                                      weight_decay=_weight_decay)
-
-    # run Log Linear with W2V:
-    if run_log_linear_w2v:
-        train_log_linear_with_w2v(lr=_lr, n_epochs=_n_epochs,
-                                  batch_size=_batch_size,
-                                  weight_decay=_weight_decay,
-                                  embedding_dim=_embedding_dim)
-
-    # run LSTM:
-    if run_lstm:
-        train_lstm_with_w2v(lr=_lr, n_epochs=_n_epochs,
-                            batch_size=_batch_size,
-                            weight_decay=_weight_decay,
-                            embedding_dim=_embedding_dim,
-                            n_layers=_n_layers, dropout=_dropout)
+# get_negated_polarity_examples(sentences_list, num_examples=None, choose_random=False)
+# get_rare_words_examples(sentences_list, dataset: SentimentTreeBank, num_sentences=50)
