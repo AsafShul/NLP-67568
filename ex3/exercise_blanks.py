@@ -492,14 +492,14 @@ def train_model(model, data_manager, n_epochs, lr, weight_decay=0.):
 
     plot_res(df, model, 'acc', n_epochs)
     plot_res(df, model, 'loss', n_epochs)
-    _, test_acc = evaluate(model, test_data_iterator, criterion, n_epochs + 1)
+    test_loss, test_acc = evaluate(model, test_data_iterator, criterion, n_epochs + 1)
     neg_acc = test_spacial_case(model, criterion, data_manager, NEG_POLAR)
     rare_acc = test_spacial_case(model, criterion, data_manager, RARE_WORDS)
     print('=' * 50)
     print(f'{model.name} Test results: ')
-    print(f'\t accuracy (test) = {test_acc}')
-    print(f'\t accuracy (neg ) = {neg_acc}')
-    print(f'\t accuracy (rare) = {rare_acc}')
+    print(f'\t accuracy (test) = {np.round(test_acc, 4)}, loss (test) = {np.round(test_loss, 4)}')
+    print(f'\t accuracy (neg ) = {np.round(neg_acc, 4)}')
+    print(f'\t accuracy (rare) = {np.round(rare_acc, 4)}')
     print('=' * 50)
 
 
@@ -512,7 +512,7 @@ def test_spacial_case(model, criterion, data_manager, mode):
         return
     spacial_sentences = np.array(data_manager.sentences[TEST])[idx]
     loader = DataLoader(OnlineDataset(spacial_sentences, data_manager.sent_func, data_manager.sent_func_kwargs))
-    _, acc = evaluate(model, loader, criterion, '*spacial*')
+    _, acc = evaluate(model, loader, criterion, f'*spacial-{mode}*')
     return acc
 
 
