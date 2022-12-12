@@ -29,11 +29,24 @@ API CHANGES:
   we need to call this function we alrady have the output calculated.
 
 
-# todo: compare models:
 1. Comparing the results (test accuracy, validation accuracy) for the log-linear model (one-hot and W2V):
- #Which one performs better? Provide a possible explanation for the results you have.
+    - Which one performs better?
+          The W2V preforms better than the One-Hot for the Log-linear model on all the test sets.
+    - Possible explanation for the results:
+          This could happen because of many reasons like that the vector embedding's lower dimension better encapsulate
+          the sentiment of the sentence, and reduce possible "noise" in the sample in the form of words that dos'nt help
+          the model with the sentiment analysis.
+
 2. Comparing the log-linear models results with the results of the LSTM model:
- #Which one performs better? Provide an explanation for the results you received.
+    - Which one performs better?
+        The LSTM preforms better than the Log-linear model on all the test sets.
+    - Possible explanation for the results:
+        This probably because the LSTM model is more expressive than the Log-Linear model because of its special
+        LSTM cells and the hidden layer structure, therefor can better learn the relations that are relevant for
+        the sentiment analysis, furthermore, the LSTM model checks for relations on both directions of the sentence.
+        As we can tell from the loss graphs, it seems that the LSTM model actually succeeded in generalizing,
+        and the validation loss and acc are improving.
+
 3. Comparing the results that all the models had on the 2 special subsets of sentences:
  #For each subset, state the model that has the highest result (and the lowest result) and provide a possible explanation for these results.
 
