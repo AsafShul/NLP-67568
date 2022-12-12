@@ -194,7 +194,6 @@ def get_word_to_ind(words_list):
     return idx_dict
 
 
-# todo check default
 def sentence_to_embedding(sent, word_to_vec, seq_len, embedding_dim=300):
     """
     this method gets a sentence and a word to vector mapping, and returns a list containing the
@@ -409,7 +408,7 @@ def train_epoch(model, data_iterator, optimizer, criterion, n):
             optimizer.step()
 
             # metrics:
-            accuracy = binary_accuracy(get_predictions_for_data(model, output), target)  # todo api
+            accuracy = binary_accuracy(get_predictions_for_data(model, output), target)
             epoch_loss.append(iter_loss.item())
             epoch_acc.append(accuracy.item())
 
@@ -475,8 +474,7 @@ def train_model(model, data_manager, n_epochs, lr, weight_decay=0.):
     :param lr: learning rate to be used for optimization
     :param weight_decay: parameter for l2 regularization
     """
-    # criterion = nn.BCEWithLogitsLoss(pos_weight=torch.ones([model.v], device=model.device))
-    criterion = nn.BCEWithLogitsLoss()  # todo pos weights?
+    criterion = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
 
     train_data_iterator = data_manager.get_torch_iterator(TRAIN)
@@ -526,7 +524,7 @@ def plot_res(df, model, metric, n_epochs, save=True):
     plt.show()
 
 
-def train_log_linear_with_one_hot(lr=0.01, n_epochs=20, batch_size=64, weight_decay=0.001):  # todo api
+def train_log_linear_with_one_hot(lr=0.01, n_epochs=20, batch_size=64, weight_decay=0.001):
     """
     Here comes your code for training and evaluation of the log linear model with one hot representation.
     """
@@ -535,7 +533,7 @@ def train_log_linear_with_one_hot(lr=0.01, n_epochs=20, batch_size=64, weight_de
     train_model(model, data_manager, n_epochs, lr, weight_decay=weight_decay)
 
 
-def train_log_linear_with_w2v(lr=0.01, n_epochs=20, batch_size=64, weight_decay=0.001, embedding_dim=300):  # todo api
+def train_log_linear_with_w2v(lr=0.01, n_epochs=20, batch_size=64, weight_decay=0.001, embedding_dim=300):
     """
     Here comes your code for training and evaluation of the log linear model with word embeddings
     representation.

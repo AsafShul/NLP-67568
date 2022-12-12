@@ -4,15 +4,11 @@ MAIN:
 if your comuter supports GPU acceleration and you want to use it change the "USE_ACCELERATION"
 variable to True.
 
-# To choose what models to run, change the values of
-#     - run_log_linear
-#     - run_log_linear_w2v
-#     - run_lstm
-# to True / False accordingly.
-
-# todo default values for train
 
 API CHANGES:
+* in the creation of each model, the default values are the ones spicified for the runs in
+  the pdf.
+
 * changed "get_available_device" function to support macOs GPU accelaration, not just cuda.
       - added an import to "platform" library, and the helper function "_running_on_mac()".
 
