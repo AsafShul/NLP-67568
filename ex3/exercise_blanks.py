@@ -23,8 +23,8 @@ ONEHOT_AVERAGE = "onehot_average"
 W2V_AVERAGE = "w2v_average"
 W2V_SEQUENCE = "w2v_sequence"
 
-BASE       = 'base'
-NEG_POLAR  = 'negated_polarity'
+BASE = 'base'
+NEG_POLAR = 'negated_polarity'
 RARE_WORDS = 'rare_words'
 
 W2V_PATH = "w2v_dict.pkl"
@@ -40,6 +40,7 @@ NVIDIA_GPU_ACCELERATION = 'cuda'
 
 RES_DF_COLS = ['Train_loss', 'Train_acc', 'Val_loss', 'Val_acc']
 PLOT_TITLE = '{}: {} plot for {} epochs'
+
 
 # ------------------------------------------ Helper methods and classes --------------------------
 
@@ -171,12 +172,10 @@ def average_one_hots(sent, word_to_ind):
     :param word_to_ind: a mapping between words to indices
     :return:
     """
-    v = len(word_to_ind)
-    mean = np.zeros(v)
-    words_list = [word.text[0] for word in sent.get_leaves()]
-    for word in words_list:
-        mean += get_one_hot(v, word_to_ind[word])
-    return mean / len(words_list)
+    mean = np.zeros(len(word_to_ind))
+    for word in sent.text:
+        mean[word_to_ind[word]] += 1
+    return mean / len(sent.text)
 
 
 def get_word_to_ind(words_list):
@@ -195,7 +194,7 @@ def get_word_to_ind(words_list):
     return idx_dict
 
 
-  # todo check default
+# todo check default
 def sentence_to_embedding(sent, word_to_vec, seq_len, embedding_dim=300):
     """
     this method gets a sentence and a word to vector mapping, and returns a list containing the
@@ -238,6 +237,10 @@ class OnlineDataset(Dataset):
         return sent_emb, sent_label
 
 
+def filter_sentences(sentences, func, *args):
+    return list(np.array(sentences)[func(sentences, *args)])
+
+
 class DataManager():
     """
     Utility class for handling all data management task. Can be used to get iterators for training and
@@ -272,6 +275,7 @@ class DataManager():
         if data_type == ONEHOT_AVERAGE:
             self.sent_func = average_one_hots
             self.sent_func_kwargs = {"word_to_ind": get_word_to_ind(words_list)}
+
         elif data_type == W2V_SEQUENCE:
             self.sent_func = sentence_to_embedding
             cache = os.path.exists(W2V_SEQ_PATH)
@@ -328,7 +332,7 @@ class LSTM(nn.Module):
 
     def __init__(self, embedding_dim, hidden_dim, n_layers, dropout):
         super().__init__()
-        self.name = "LSTM"
+        self.name = f"LSTM"
         self.device = get_available_device(True)
         self.sigmoid = nn.Sigmoid()
         self.alpha = 0.5
@@ -461,7 +465,7 @@ def get_predictions_for_data(model, output):
     return (model.sigmoid(output) > model.alpha).to(torch.float32).reshape((-1,))
 
 
-def train_model(model, data_manager, n_epochs, lr, weight_decay=0.): # todo api
+def train_model(model, data_manager, n_epochs, lr, weight_decay=0.):
     """
     Runs the full training procedure for the given model. The optimization should be done using the Adam
     optimizer with all parameters but learning rate and weight decay set to default.
@@ -474,8 +478,11 @@ def train_model(model, data_manager, n_epochs, lr, weight_decay=0.): # todo api
     # criterion = nn.BCEWithLogitsLoss(pos_weight=torch.ones([model.v], device=model.device))
     criterion = nn.BCEWithLogitsLoss()  # todo pos weights?
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+
     train_data_iterator = data_manager.get_torch_iterator(TRAIN)
     val_data_iterator = data_manager.get_torch_iterator(VAL)
+    test_data_iterator = data_manager.get_torch_iterator(TEST)
+
     df = pd.DataFrame(np.nan, index=range(n_epochs), columns=RES_DF_COLS)
 
     for epoch in range(1, n_epochs + 1):
@@ -487,9 +494,31 @@ def train_model(model, data_manager, n_epochs, lr, weight_decay=0.): # todo api
 
     plot_res(df, model, 'acc', n_epochs)
     plot_res(df, model, 'loss', n_epochs)
+    _, test_acc = evaluate(model, test_data_iterator, criterion, n_epochs + 1)
+    neg_acc = test_spacial_case(model, criterion, data_manager, NEG_POLAR)
+    rare_acc = test_spacial_case(model, criterion, data_manager, RARE_WORDS)
+    print('=' * 50)
+    print(f'{model.name} Test results: ')
+    print(f'\t accuracy (test) = {test_acc}')
+    print(f'\t accuracy (neg ) = {neg_acc}')
+    print(f'\t accuracy (rare) = {rare_acc}')
+    print('=' * 50)
 
 
-def plot_res(df, model,  metric, n_epochs, save=True):
+def test_spacial_case(model, criterion, data_manager, mode):
+    if mode == NEG_POLAR:
+        idx = data_loader.get_negated_polarity_examples(data_manager.sentences[TEST])
+    elif mode == RARE_WORDS:
+        idx = data_loader.get_rare_words_examples(data_manager.sentences[TEST], data_manager.sentiment_dataset)
+    else:
+        return
+    spacial_sentences = np.array(data_manager.sentences[TEST])[idx]
+    loader = DataLoader(OnlineDataset(spacial_sentences, data_manager.sent_func, data_manager.sent_func_kwargs))
+    _, acc = evaluate(model, loader, criterion, '*spacial*')
+    return acc
+
+
+def plot_res(df, model, metric, n_epochs, save=True):
     ax = df[[c for c in RES_DF_COLS if metric in c]].plot(title=PLOT_TITLE.format(model.name, metric, n_epochs))
     ax.set_xlabel("epoch num")
     ax.set_ylabel(metric)
@@ -497,17 +526,16 @@ def plot_res(df, model,  metric, n_epochs, save=True):
     plt.show()
 
 
-def train_log_linear_with_one_hot(lr=0.01, n_epochs=20, batch_size=64, weight_decay=0.001, mode=BASE): # todo api
+def train_log_linear_with_one_hot(lr=0.01, n_epochs=20, batch_size=64, weight_decay=0.001):  # todo api
     """
     Here comes your code for training and evaluation of the log linear model with one hot representation.
     """
     data_manager = DataManager(batch_size=batch_size)
     model = LogLinear(data_manager.get_input_shape()[0])
-    # train_model(model, data_manager, n_epochs, lr, weight_decay=weight_decay, mode=mode) # todo api
     train_model(model, data_manager, n_epochs, lr, weight_decay=weight_decay)
 
 
-def train_log_linear_with_w2v(lr=0.01, n_epochs=20, batch_size=64, weight_decay=0.001, embedding_dim=300):
+def train_log_linear_with_w2v(lr=0.01, n_epochs=20, batch_size=64, weight_decay=0.001, embedding_dim=300):  # todo api
     """
     Here comes your code for training and evaluation of the log linear model with word embeddings
     representation.
@@ -522,35 +550,14 @@ def train_lstm_with_w2v(lr=0.001, n_epochs=4, batch_size=64,
     """
     Here comes your code for training and evaluation of the LSTM model.
     """
-    data_manager = DataManager(data_type=W2V_SEQUENCE, embedding_dim=embedding_dim,
-                               batch_size=batch_size)
-
-    model = LSTM(embedding_dim=embedding_dim, hidden_dim=100,
-                 n_layers=n_layers, dropout=dropout)
-
+    data_manager = DataManager(data_type=W2V_SEQUENCE, embedding_dim=embedding_dim, batch_size=batch_size)
+    model = LSTM(embedding_dim=embedding_dim, hidden_dim=100, n_layers=n_layers, dropout=dropout)
     train_model(model, data_manager, n_epochs, lr, weight_decay=weight_decay)
 
 
 if __name__ == '__main__':
     USE_ACCELERATION = False
-    # todo : all runs on the spacial cases as well...
-    # todo : what to do with the test set??
 
-    # base dataset runs:
     train_log_linear_with_one_hot()
     train_log_linear_with_w2v()
     train_lstm_with_w2v()
-
-    # # negated polarity dataset runs:
-    # train_log_linear_with_one_hot(mode=NEG_POLAR)
-    # train_log_linear_with_w2v(mode=NEG_POLAR)
-    # train_lstm_with_w2v(mode=NEG_POLAR)
-    #
-    # # rare words dataset runs:
-    # train_log_linear_with_one_hot(mode=RARE_WORDS)
-    # train_log_linear_with_w2v(mode=RARE_WORDS)
-    # train_lstm_with_w2v(mode=RARE_WORDS)
-
-
-# get_negated_polarity_examples(sentences_list, num_examples=None, choose_random=False)
-# get_rare_words_examples(sentences_list, dataset: SentimentTreeBank, num_sentences=50)

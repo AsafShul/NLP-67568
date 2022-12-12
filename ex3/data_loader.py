@@ -105,11 +105,9 @@ class SentimentTreeBank(object):
                             cur_parent = cur_parent.parent
                 sent.text = sent.root.text
 
-
         assert len(split_ratios) == 3
         assert sum(split_ratios) == 1
         self.split_ratios = split_ratios
-
 
 
     def _read_sentences(self):
